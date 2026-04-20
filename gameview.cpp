@@ -11,6 +11,8 @@ int viewWidth = 1200;
 int viewHeight= 768;
 
 GameView::GameView() {
+    gameStarted = false;
+    networkManager = nullptr; // 추가
 
     setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
@@ -98,11 +100,21 @@ void GameView::displayRoomList() {
         ActionButton *joinBtn = new ActionButton("Join");
         joinBtn->setPos(col4, rowY);
         joinBtn->setScale(0.7); // 리스트용으로 조금 작게 조절
+        // 수정된 코드
         connect(joinBtn, &ActionButton::buttonPressed, this, [this](){
-            networkManager = new NetworkManager(this);
-            networkManager->connectToHost("127.0.0.1", 12345); // 로컬 주소 접속
+            myColor = PlayerType::black;
 
+            // 1. 인스턴스 생성 (누락되었던 부분)
+            if (!networkManager) {
+                networkManager = new NetworkManager(this);
+            }
+
+            // 2. 시그널 연결을 먼저 수행하는 것이 안전합니다.
+            connect(networkManager, &NetworkManager::dataReceived, this, &GameView::onDataReceived);
             connect(networkManager, &NetworkManager::connected, this, &GameView::startGame);
+
+            // 3. 서버 접속 시도
+            networkManager->connectToHost("127.0.0.1", 12345);
         });
         scene->addItem(joinBtn);
     }
@@ -123,6 +135,7 @@ void GameView::displayRoomList() {
 
 // 방 만들기 버튼 클릭 시 실행될 함수
 void GameView::hostGame() {
+    myColor = PlayerType::white; // 방장은 흰색
     networkManager = new NetworkManager(this);
     if (networkManager->startHosting()) {
         qDebug() << "Server started! Waiting for player...";
@@ -131,6 +144,7 @@ void GameView::hostGame() {
             startGame(); // 상대방 접속 시 게임 시작
         });
     }
+    connect(networkManager, &NetworkManager::dataReceived, this, &GameView::onDataReceived);
 }
 
 void GameView::startGame() {
@@ -230,6 +244,17 @@ void GameView::mousePressEvent(QMouseEvent *event) {
         handleSelectingPointForActivePawnByMouse(event->pos());
     } else {
         PawnField *pawn = board->getPawnAtMousePosition(event->pos());
+
+        if (pawn != nullptr) {
+            // 1. 클릭한 위치의 좌표를 가져옵니다.
+            BoardPosition pos = boardViewModel.getBoardPositionForMousePosition(event->pos());
+
+            // 2. 해당 좌표에 있는 말의 주인이 내 색깔(myColor)과 같은지 확인합니다.
+            // boardViewModel의 기능을 활용하여 직접 비교합니다.
+            if (boardViewModel.getPawnColorAtPosition(pos) != myColor) {
+                return; // 내 말이 아니면 무시
+            }
+        }
         selectPawn(pawn);
     }
 
@@ -255,6 +280,8 @@ void GameView::selectPawn(PawnField *pawn) {
 }
 
 void GameView::handleSelectingPointForActivePawnByMouse(QPoint point) {
+    if (!gameStarted || boardViewModel.getWhosTurn() != myColor) return; // 내 턴이 아니면 무시
+
     if (boardViewModel.getActivePawn() == nullptr) {
         return;
     }
@@ -277,7 +304,6 @@ void GameView::handleSelectingPointForActivePawnByMouse(QPoint point) {
     if (isKingInCheck) {
         return;
     }
-
     // check if field was taken by opposite player and remove it from the board
     if (boardViewModel.didRemoveEnemyOnBoardPosition(boardPosition)) {
         board->removePawnAtBoardPosition(boardPosition);
@@ -310,11 +336,62 @@ void GameView::handleSelectingPointForActivePawnByMouse(QPoint point) {
         return;
     }
 
-    // change round owner to opposite player
+    // 1. 이동 전의 원래 위치 저장 (상대에게 보낼 데이터)
+    BoardPosition from = boardViewModel.getActivePawn()->position;
+
+    // 2. 로컬에서 말 이동 실행
+    moveActivePawnToSelectedPoint(point);
+
+    // 3. 상대방에게 전송 (이동 직후 바로 전송)
+    if (networkManager) {
+        QString movePacket = QString("MOVE|%1|%2|%3|%4")
+        .arg(from.x).arg(from.y).arg(boardPosition.x).arg(boardPosition.y);
+        networkManager->sendMove(movePacket);
+    }
+
+    // 4. 턴 교체 및 마무리
     boardViewModel.discardActivePawn();
     boardViewModel.switchRound();
+
     blackPlayerView->setActive(boardViewModel.getWhosTurn() == PlayerType::black);
     whitePlayerView->setActive(boardViewModel.getWhosTurn() == PlayerType::white);
+}
+
+void GameView::onDataReceived(QString data) {
+    QStringList parts = data.split("|");
+    if (parts[0] == "MOVE") {
+        int fx = parts[1].toInt();
+        int fy = parts[2].toInt();
+        int tx = parts[3].toInt();
+        int ty = parts[4].toInt();
+
+        BoardPosition from(fx, fy);
+        BoardPosition to(tx, ty);
+
+        // 내 화면에 있는 전체 말(PawnField) 중에서 해당 좌표에 있는 말을 찾음
+        PawnField* remotePawn = board->getPawnAtBoardPosition(from);
+
+        if(remotePawn) {
+            // 1. 모델에도 이 말을 선택한 것으로 설정
+            boardViewModel.setActivePawnForField(remotePawn);
+
+            // 2. 화면 이동 (강제 좌표 이동)
+            board->placeActivePawnAtBoardPosition(boardViewModel.getActivePawn(), to);
+
+            // 3. 모델 데이터 갱신 (Pawn의 x, y 좌표값 변경)
+            boardViewModel.setNewPositionForActivePawn(to);
+
+            // 4. 턴 교체
+            boardViewModel.discardActivePawn();
+            boardViewModel.switchRound();
+
+            // 5. UI 업데이트
+            blackPlayerView->setActive(boardViewModel.getWhosTurn() == PlayerType::black);
+            whitePlayerView->setActive(boardViewModel.getWhosTurn() == PlayerType::white);
+        } else {
+            qDebug() << "Error: Could not find piece at" << fx << fy;
+        }
+    }
 }
 
 void GameView::setCheckStateOnPlayerView(PlayerType player, bool isInCheck) {

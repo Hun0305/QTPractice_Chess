@@ -11,6 +11,7 @@ class BoardViewModel {
 
 public:
     BoardViewModel();
+    PlayerType getPawnColorAtPosition(BoardPosition position); // 추가
 
     bool isEnPassantAvailable;
 

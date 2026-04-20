@@ -382,3 +382,13 @@ bool BoardViewModel::validateKingsCheckForPawns(QList<BasePawnModel*> pawns,
 
     return isInCheck;
 }
+
+// boardviewmodel.cpp 파일 끝에 추가
+PlayerType BoardViewModel::getPawnColorAtPosition(BoardPosition position) {
+    BasePawnModel* pawn = getPawnOnBoardPosition(position);
+    if (pawn) {
+        return pawn->owner; // 기물이 있으면 그 주인의 색상을 반환
+    }
+    // 기물이 없는 경우 기본값 반환 (이 함수는 보통 기물이 있을 때만 호출됨)
+    return PlayerType::white;
+}
