@@ -161,4 +161,7 @@ $RECYCLE.BIN/
 # Windows shortcuts
 *.lnk
 
+ChessGame_223637.pro.user
+*.svg
+
 # End of https://www.toptal.com/developers/gitignore/api/windows,visualstudiocode,c++,qtcreator,qt
