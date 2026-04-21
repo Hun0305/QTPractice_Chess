@@ -35,8 +35,10 @@ PlayerType BoardViewModel::getWhosTurn() {
     return whosTurn;
 }
 
+// getWinner 함수 수정
 PlayerType* BoardViewModel::getWinner() {
-    return winner;
+    if (hasWinner) return &winnerColor;
+    return nullptr;
 }
 
 void BoardViewModel::setActivePawnForField(PawnField *pawn) {
@@ -133,8 +135,10 @@ bool BoardViewModel::didRemoveEnemyOnBoardPosition(BoardPosition boardPosition) 
             break;
         }
 
+        // didRemoveEnemyOnBoardPosition 함수 내부
         if (pawn->type == PawnType::king) {
-            winner = &whosTurn;
+            hasWinner = true;
+            winnerColor = whosTurn; // 현재 턴인 사람이 승리자
         }
 
         delete pawn;
@@ -381,4 +385,14 @@ bool BoardViewModel::validateKingsCheckForPawns(QList<BasePawnModel*> pawns,
     }
 
     return isInCheck;
+}
+
+// boardviewmodel.cpp 파일 끝에 추가
+PlayerType BoardViewModel::getPawnColorAtPosition(BoardPosition position) {
+    BasePawnModel* pawn = getPawnOnBoardPosition(position);
+    if (pawn) {
+        return pawn->owner; // 기물이 있으면 그 주인의 색상을 반환
+    }
+    // 기물이 없는 경우 기본값 반환 (이 함수는 보통 기물이 있을 때만 호출됨)
+    return PlayerType::white;
 }

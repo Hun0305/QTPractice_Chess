@@ -15,6 +15,7 @@ class PawnField;
 class BoardViewModel {
 public:
     BoardViewModel();
+    PlayerType getPawnColorAtPosition(BoardPosition position); // 추가
 
     // [하이라이트 기능 추가] 모든 칸 리스트 및 제어 함수
     QList<BoardField*> allFields;
@@ -46,6 +47,8 @@ public:
 private:
     BasePawnModel *activePawn;
     PlayerType whosTurn;
+    PlayerType winnerColor; // 포인터 대신 값 저장
+    bool hasWinner = false;
     QList<BasePawnModel*> blackPawns;
     QList<BasePawnModel*> whitePawns;
     PawnViewModel pawnViewModel;
