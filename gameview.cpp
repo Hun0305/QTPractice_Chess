@@ -62,7 +62,9 @@ void GameView::displayMainMenu() {
 }
 
 void GameView::displayRoomList() {
-    scene->clear(); // 현재 화면 지우기
+    if (scene) {
+        scene->clear(); // 여기서 죽는다면, 이전 아이템에 연결된 시그널이 문제일 수 있습니다.
+    }
 
     // --- [추가] 오른쪽 상단 로그인 정보 표시 ---
     if (!loggedInUserId.isEmpty()) {
@@ -154,8 +156,10 @@ void GameView::displayRoomList() {
 
     // 버튼 클릭 시 RankingDialog 실행 연결 (람다식 활용)
     connect(rankingBtn, &ActionButton::buttonPressed, this, [this]() {
-        RankingDialog dialog(this);
-        dialog.exec();
+        RankingDialog *dialog = new RankingDialog(this);
+        // 창이 닫히면 메모리에서 자동으로 삭제되도록 설정
+        dialog->setAttribute(Qt::WA_DeleteOnClose);
+        dialog->show();
     });
     scene->addItem(rankingBtn);
 
@@ -175,29 +179,60 @@ void GameView::displayRoomList() {
 
 // 방 만들기 버튼 클릭 시 실행될 함수
 void GameView::hostGame() {
-    myColor = PlayerType::white; // 방장은 흰색
-    networkManager = new NetworkManager(this);
-    if (networkManager->startHosting()) {
-        qDebug() << "Server started! Waiting for player...";
-        // 연결될 때까지 대기 메시지 표시 (UI 작업)
-        connect(networkManager, &NetworkManager::connected, this, [this](){
-            startGame(); // 상대방 접속 시 게임 시작
-        });
+    myColor = PlayerType::white;
+
+    // 1. 기존 매니저와 시그널을 확실히 정리
+    if (networkManager) {
+        networkManager->disconnect(); // 모든 연결 끊기
+        networkManager->deleteLater();
+        networkManager = nullptr;
     }
-    connect(networkManager, &NetworkManager::dataReceived, this, &GameView::onDataReceived);
+
+    networkManager = new NetworkManager(this);
+
+    // 2. 연결을 한 번만 수행
+    connect(networkManager, &NetworkManager::connected, this, &GameView::startGame, Qt::UniqueConnection);
+    connect(networkManager, &NetworkManager::dataReceived, this, &GameView::onDataReceived, Qt::UniqueConnection);
+
+    networkManager->startHosting();
 }
 
 void GameView::startGame() {
+    gameStarted = false; // 이벤트 차단
 
-    scene->clear();
+    if (scene) {
+        // 아이템들을 완전히 제거
+        scene->clear();
+    }
 
+    // [수정] 기존 방식 대신 '포인터'로 관리하거나 새로 초기화하는 로직 확인
+    // 현재 boardViewModel이 멤버 변수(객체)이므로,
+    // 내부 데이터(blackPawns, whitePawns 등)가 이전 판의 정보를 들고 있어 충돌날 수 있습니다.
+    // 가장 확실한 방법은 startGame 시점에 필요한 객체들을 순서대로 생성하는 것입니다.
+
+    // 1. 보드 뷰 먼저 생성 (메모리 할당)
+    if (board) {
+        // 기존 보드가 있다면 메모리 해제는 scene->clear()에서 어느정도 처리되지만,
+        // 포인터 자체를 안전하게 관리해야 합니다.
+    }
+
+    // 2. UI 요소들을 그리기 전에 모델 데이터가 준비되어야 함
+    // BoardViewModel의 생성자가 initializePawns()를 호출하는지 확인하세요.
     boardViewModel = BoardViewModel();
 
+    // 3. UI 그리기 함수 호출
     drawBoard();
     drawSettingsPanel();
     drawUserPanel();
-    int titleYPosition = Constants::defaultMargin;
-    drawTitle(titleYPosition, 40);
+
+    // 닉네임 재표시
+    if (!loggedInUserId.isEmpty()) {
+        QGraphicsTextItem *userDisplay = Utils::createTextItem("닉네임 : " + loggedInUserId, 16, QColor("#FFD700"));
+        userDisplay->setPos(this->width() - userDisplay->boundingRect().width() - 20, 20);
+        scene->addItem(userDisplay);
+    }
+
+    drawTitle(Constants::defaultMargin, 40);
     gameStarted = true;
 }
 
@@ -206,7 +241,10 @@ void GameView::quitGame() {
 }
 
 void GameView::drawBoard() {
+    if (!scene) return;
+
     board = new BoardView();
+    scene->addItem(board);
     board->draw();
     board->initializePawnFields(boardViewModel.getBlackPawns());
     board->initializePawnFields(boardViewModel.getWhitePawns());
@@ -443,32 +481,35 @@ void GameView::handleSelectingPointForActivePawnByMouse(QPoint point) {
 }
 
 void GameView::onDataReceived(QString data) {
+    // 1. 안전 장치: 게임이 시작되지 않았거나 화면 전환 중이면 무시
+    if (!gameStarted || board == nullptr || scene == nullptr) {
+        return;
+    }
     QStringList messages = data.split(";", Qt::SkipEmptyParts);
 
     for (const QString& singleMove : messages) {
 
+        // --- [RESIGN 처리] ---
         if (singleMove == "RESIGN") {
-            // 상대방이 항복했으므로 내(myColor)가 승리자
-            addLog("<font color='red'>Opposite Resigned the game.</font>");
+            addLog("<font color='red'>Opponent Resigned the game.</font>");
             showCongratulationsScreen(myColor);
             return;
         }
 
+        // --- [GAMEOVER 처리] ---
         if (singleMove.startsWith("GAMEOVER")) {
             QStringList parts = singleMove.split("|");
             if (parts.size() >= 2) {
-                // 패킷에 실려온 승리자 색상을 추출
                 PlayerType winner = static_cast<PlayerType>(parts[1].toInt());
-
                 addLog("<font color='red'>King has been captured! Game Over.</font>");
-                showCongratulationsScreen(winner); // 결과 화면 띄우기
+                showCongratulationsScreen(winner);
                 return;
             }
         }
 
+        // --- [MOVE 처리] ---
         QStringList parts = singleMove.split("|");
         if (parts.size() < 5 || parts[0] != "MOVE") continue;
-
 
         int fx = parts[1].toInt();
         int fy = parts[2].toInt();
@@ -477,34 +518,40 @@ void GameView::onDataReceived(QString data) {
 
         BoardPosition from(fx, fy);
         BoardPosition to(tx, ty);
-        addLog(QString("Opponent moved to %1").arg(getChessNotation(to)));
+
+        // 2. 객체 참조 전 최종 유효성 검사
+        if (!board) break;
 
         PawnField* remotePawn = board->getPawnAtBoardPosition(from);
         if (remotePawn) {
-            // 1. 모델에서 현재 움직이는 말을 활성화
             boardViewModel.setActivePawnForField(remotePawn);
 
-            // 2. [추가] 목적지에 적이 있다면 제거 로직 실행 (승리 조건 체크 포함)
             if (boardViewModel.didRemoveEnemyOnBoardPosition(to)) {
                 board->removePawnAtBoardPosition(to);
             }
 
-            // 3. 화면 이동 및 모델 좌표 갱신
-            board->placeActivePawnAtBoardPosition(boardViewModel.getActivePawn(), to);
-            boardViewModel.setNewPositionForActivePawn(to);
-
-            // 4. [추가] 승리자가 있는지 확인 (킹이 잡혔는지 체크)
-            if (boardViewModel.getWinner()) {
-                showCongratulationsScreen(*boardViewModel.getWinner());
-                return; // 게임 종료 시 함수 탈출
+            // activePawn이 유효한지 한 번 더 확인
+            if (boardViewModel.getActivePawn()) {
+                board->placeActivePawnAtBoardPosition(boardViewModel.getActivePawn(), to);
+                boardViewModel.setNewPositionForActivePawn(to);
             }
 
-            // 5. 턴 교체 및 마무리
+            // 승리자 체크
+            if (boardViewModel.getWinner()) {
+                showCongratulationsScreen(*boardViewModel.getWinner());
+                return;
+            }
+
             boardViewModel.discardActivePawn();
             boardViewModel.switchRound();
 
-            blackPlayerView->setActive(boardViewModel.getWhosTurn() == PlayerType::black);
-            whitePlayerView->setActive(boardViewModel.getWhosTurn() == PlayerType::white);
+            // UI 갱신 전 포인터 확인
+            if (blackPlayerView && whitePlayerView) {
+                blackPlayerView->setActive(boardViewModel.getWhosTurn() == PlayerType::black);
+                whitePlayerView->setActive(boardViewModel.getWhosTurn() == PlayerType::white);
+            }
+
+            addLog(QString("Opponent moved to %1").arg(getChessNotation(to)));
         }
     }
 }

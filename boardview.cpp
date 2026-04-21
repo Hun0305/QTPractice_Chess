@@ -18,7 +18,6 @@ int BoardView::startYPosition = 150;
 BoardView::BoardView() {
     int size = numberOfRowsColumns * BoardField::defaultWidthHeight;
     setRect(startXPosition, startYPosition, size, size);
-    game->scene->addItem(this);
 }
 
 QList<BoardField*> BoardView::getFields() {
