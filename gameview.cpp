@@ -279,87 +279,60 @@ void GameView::selectPawn(PawnField *pawn) {
     boardViewModel.setActivePawnForField(pawn);
 }
 
+// 2. 패킷 전송 로직 수정 (문제 2 해결)
 void GameView::handleSelectingPointForActivePawnByMouse(QPoint point) {
-    if (!gameStarted || boardViewModel.getWhosTurn() != myColor) return; // 내 턴이 아니면 무시
+    if (!gameStarted || boardViewModel.getWhosTurn() != myColor) return;
+    if (boardViewModel.getActivePawn() == nullptr) return;
 
-    if (boardViewModel.getActivePawn() == nullptr) {
-        return;
-    }
+    if (!boardViewModel.validatePawnPalcementForMousePosition(point)) return;
+    BoardPosition toPosition = boardViewModel.getBoardPositionForMousePosition(point);
+    if (!boardViewModel.validatePawnMove(toPosition)) return;
 
-    // check if mouse selected place on board
-    if (!boardViewModel.validatePawnPalcementForMousePosition(point)) {
-        return;
-    }
+    // [중요] 이동 전의 원래 위치를 '가장 먼저' 저장해야 합니다!
+    BoardPosition fromPosition = boardViewModel.getActivePawn()->position;
 
-    BoardPosition boardPosition = boardViewModel.getBoardPositionForMousePosition(point);
-
-    // first validate Move
-    if (!boardViewModel.validatePawnMove(boardPosition)) {
-        return;
-    }
-
-    // Players cannot make any move that places their own king in check
-    bool isKingInCheck = boardViewModel.isKingInCheck(boardViewModel.getActivePawn()->owner, true, boardPosition);
+    // 킹 체크 로직
+    bool isKingInCheck = boardViewModel.isKingInCheck(boardViewModel.getActivePawn()->owner, true, toPosition);
     board->setPawnMoveCheckWarning(isKingInCheck);
-    if (isKingInCheck) {
-        return;
-    }
-    // check if field was taken by opposite player and remove it from the board
-    if (boardViewModel.didRemoveEnemyOnBoardPosition(boardPosition)) {
-        board->removePawnAtBoardPosition(boardPosition);
+    if (isKingInCheck) return;
+
+    // 상대 기물 제거 로직
+    if (boardViewModel.didRemoveEnemyOnBoardPosition(toPosition)) {
+        board->removePawnAtBoardPosition(toPosition);
     }
 
-    // move active pawn to new position
+    // [수정] 여기서 한 번만 이동을 실행합니다.
     moveActivePawnToSelectedPoint(point);
 
-    // check if pawn can be promoted
+    // 승급 체크
     if (boardViewModel.didPromoteActivePawn()) {
-        board->promotePawnAtBoardPosition(boardPosition);
+        board->promotePawnAtBoardPosition(toPosition);
     }
 
-    // check for opposite player king's check
-    switch (boardViewModel.getActivePawn()->owner) {
-    case PlayerType::black:
-        setCheckStateOnPlayerView(PlayerType::white, boardViewModel.isKingInCheck(PlayerType::white, false, boardPosition));
-        break;
-    case PlayerType::white:
-        setCheckStateOnPlayerView(PlayerType::black, boardViewModel.isKingInCheck(PlayerType::black, false, boardPosition));
-        break;
-    }
-
-    // update active player check state
-    setCheckStateOnPlayerView(boardViewModel.getActivePawn()->owner, isKingInCheck);
-
-    // check if game is over
-    if (boardViewModel.getWinner()) {
-        showCongratulationsScreen(*boardViewModel.getWinner());
-        return;
-    }
-
-    // 1. 이동 전의 원래 위치 저장 (상대에게 보낼 데이터)
-    BoardPosition from = boardViewModel.getActivePawn()->position;
-
-    // 2. 로컬에서 말 이동 실행
-    moveActivePawnToSelectedPoint(point);
-
-    // 3. 상대방에게 전송 (이동 직후 바로 전송)
     if (networkManager) {
         QString movePacket = QString("MOVE|%1|%2|%3|%4")
-        .arg(from.x).arg(from.y).arg(boardPosition.x).arg(boardPosition.y);
+        .arg(fromPosition.x).arg(fromPosition.y)
+            .arg(toPosition.x).arg(toPosition.y);
         networkManager->sendMove(movePacket);
+    } else {
+        qDebug() << "Critical Error: networkManager is null on Host!";
     }
 
-    // 4. 턴 교체 및 마무리
-    boardViewModel.discardActivePawn();
+    // 마무리 로직
     boardViewModel.switchRound();
+    boardViewModel.discardActivePawn();
 
     blackPlayerView->setActive(boardViewModel.getWhosTurn() == PlayerType::black);
     whitePlayerView->setActive(boardViewModel.getWhosTurn() == PlayerType::white);
 }
 
 void GameView::onDataReceived(QString data) {
-    QStringList parts = data.split("|");
-    if (parts[0] == "MOVE") {
+    QStringList messages = data.split(";", Qt::SkipEmptyParts);
+
+    for (const QString& singleMove : messages) {
+        QStringList parts = singleMove.split("|");
+        if (parts.size() < 5 || parts[0] != "MOVE") continue;
+
         int fx = parts[1].toInt();
         int fy = parts[2].toInt();
         int tx = parts[3].toInt();
@@ -368,28 +341,32 @@ void GameView::onDataReceived(QString data) {
         BoardPosition from(fx, fy);
         BoardPosition to(tx, ty);
 
-        // 내 화면에 있는 전체 말(PawnField) 중에서 해당 좌표에 있는 말을 찾음
         PawnField* remotePawn = board->getPawnAtBoardPosition(from);
-
-        if(remotePawn) {
-            // 1. 모델에도 이 말을 선택한 것으로 설정
+        if (remotePawn) {
+            // 1. 모델에서 현재 움직이는 말을 활성화
             boardViewModel.setActivePawnForField(remotePawn);
 
-            // 2. 화면 이동 (강제 좌표 이동)
-            board->placeActivePawnAtBoardPosition(boardViewModel.getActivePawn(), to);
+            // 2. [추가] 목적지에 적이 있다면 제거 로직 실행 (승리 조건 체크 포함)
+            if (boardViewModel.didRemoveEnemyOnBoardPosition(to)) {
+                board->removePawnAtBoardPosition(to);
+            }
 
-            // 3. 모델 데이터 갱신 (Pawn의 x, y 좌표값 변경)
+            // 3. 화면 이동 및 모델 좌표 갱신
+            board->placeActivePawnAtBoardPosition(boardViewModel.getActivePawn(), to);
             boardViewModel.setNewPositionForActivePawn(to);
 
-            // 4. 턴 교체
+            // 4. [추가] 승리자가 있는지 확인 (킹이 잡혔는지 체크)
+            if (boardViewModel.getWinner()) {
+                showCongratulationsScreen(*boardViewModel.getWinner());
+                return; // 게임 종료 시 함수 탈출
+            }
+
+            // 5. 턴 교체 및 마무리
             boardViewModel.discardActivePawn();
             boardViewModel.switchRound();
 
-            // 5. UI 업데이트
             blackPlayerView->setActive(boardViewModel.getWhosTurn() == PlayerType::black);
             whitePlayerView->setActive(boardViewModel.getWhosTurn() == PlayerType::white);
-        } else {
-            qDebug() << "Error: Could not find piece at" << fx << fy;
         }
     }
 }

@@ -34,6 +34,8 @@ public:
 private:
     BasePawnModel *activePawn;
     PlayerType whosTurn;
+    PlayerType winnerColor; // 포인터 대신 값 저장
+    bool hasWinner = false;
     QList<BasePawnModel*> blackPawns;
     QList<BasePawnModel*> whitePawns;
     PawnViewModel pawnViewModel;

@@ -28,6 +28,10 @@ void NetworkManager::onReadyRead() {
 
 void NetworkManager::sendMove(QString moveData) {
     if (tcpSocket && tcpSocket->isOpen()) {
-        tcpSocket->write(moveData.toUtf8());
+        // 메시지 끝에 구분자 ';'를 추가하여 전송
+        QString framedData = moveData + ";";
+        tcpSocket->write(framedData.toUtf8());
+        tcpSocket->flush();
+        qDebug() << "Sending Packet:" << framedData;
     }
 }
