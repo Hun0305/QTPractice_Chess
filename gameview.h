@@ -21,6 +21,8 @@ public:
     GameView();
     QGraphicsScene *scene;
 
+
+
 public slots:
     void displayRoomList();
     void displayMainMenu();
@@ -63,6 +65,7 @@ private:
     void moveActivePawnToSelectedPoint(QPoint point);
     void releaseActivePawn();
     void showCongratulationsScreen(PlayerType winner);
+    void updateDatabaseResult(bool isWinner);
 };
 
 #endif // GAME_H

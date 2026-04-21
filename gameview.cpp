@@ -8,6 +8,8 @@
 #include "utils.h"
 #include <QInputDialog> // 상단에 추가
 #include "rankingdialog.h"
+#include <QSqlQuery>
+#include <QSqlError>
 
 int viewWidth = 1200;
 int viewHeight= 768;
@@ -387,6 +389,18 @@ void GameView::handleSelectingPointForActivePawnByMouse(QPoint point) {
 
     // 상대 기물 제거 로직
     if (boardViewModel.didRemoveEnemyOnBoardPosition(toPosition)) {
+
+        if (boardViewModel.isKingAtPosition(toPosition)) {
+            if (networkManager) {
+                // static_cast<int>를 추가하여 Enum을 숫자로 변환합니다.
+                QString gameOverPacket = QString("GAMEOVER|%1").arg(static_cast<int>(myColor));
+                networkManager->sendMove(gameOverPacket);
+            }
+            showCongratulationsScreen(myColor);
+            board->removePawnAtBoardPosition(toPosition);
+            return;
+        }
+
         board->removePawnAtBoardPosition(toPosition);
     }
 
@@ -438,6 +452,18 @@ void GameView::onDataReceived(QString data) {
             addLog("<font color='red'>Opposite Resigned the game.</font>");
             showCongratulationsScreen(myColor);
             return;
+        }
+
+        if (singleMove.startsWith("GAMEOVER")) {
+            QStringList parts = singleMove.split("|");
+            if (parts.size() >= 2) {
+                // 패킷에 실려온 승리자 색상을 추출
+                PlayerType winner = static_cast<PlayerType>(parts[1].toInt());
+
+                addLog("<font color='red'>King has been captured! Game Over.</font>");
+                showCongratulationsScreen(winner); // 결과 화면 띄우기
+                return;
+            }
         }
 
         QStringList parts = singleMove.split("|");
@@ -517,10 +543,15 @@ void GameView::releaseActivePawn() {
 void GameView::showCongratulationsScreen(PlayerType winner) {
     gameStarted = false;
 
-    scene->clear();
+    // [중요] 결과창이 뜨기 직전에 DB에 전적을 기록합니다.
+    bool amIWinner = (winner == myColor);
+    updateDatabaseResult(amIWinner);
 
-    CongratulationsView *congratulationsView = new CongratulationsView(winner);
-    congratulationsView->setRect(0, 0, viewWidth, viewHeight);
+    scene->clear();
+    // CongratulationsView 생성 (이전 단계에서 수정한 대로 인자 2개 전달)
+    CongratulationsView *congratulationsView = new CongratulationsView(winner, myColor);
+    congratulationsView->setRect(0, 0, width(), height());
+    scene->addItem(congratulationsView); // 씬에 추가하는 것 잊지 마세요!
 }
 
 void GameView::globalHostGame() {
@@ -557,5 +588,27 @@ void GameView::globalJoinGame() {
 
         connect(networkManager, &NetworkManager::dataReceived, this, &GameView::onDataReceived);
         connect(networkManager, &NetworkManager::connected, this, &GameView::startGame);
+    }
+}
+
+void GameView::updateDatabaseResult(bool isWinner) {
+    // 1단계에서 전달받은 ID가 있는지 확인
+    if (loggedInUserId.isEmpty()) {
+        qDebug() << "로그인 정보가 없어 전적을 업데이트할 수 없습니다.";
+        return;
+    }
+
+    QSqlQuery query;
+    if (isWinner) {
+        query.prepare("UPDATE users SET wins = wins + 1 WHERE id = :id");
+    } else {
+        query.prepare("UPDATE users SET losses = losses + 1 WHERE id = :id");
+    }
+    query.bindValue(":id", loggedInUserId);
+
+    if (!query.exec()) {
+        qDebug() << "전적 업데이트 실패:" << query.lastError().text();
+    } else {
+        qDebug() << "전적 기록 성공! 유저:" << loggedInUserId << " 결과:" << (isWinner ? "승리" : "패배");
     }
 }

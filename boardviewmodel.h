@@ -40,6 +40,7 @@ public:
     // 이동 유효성 검사 (이미 구현된 핵심 로직)
     bool validatePawnMove(BoardPosition positionToMove, BasePawnModel *pawnToValidate = nullptr, BoardPosition *requestedActivePawnPosition = nullptr);
     bool didRemoveEnemyOnBoardPosition(BoardPosition boardPosition);
+    bool isKingAtPosition(BoardPosition pos);
     bool isKingInCheck(PlayerType owner, bool isCheckingActivePlayer = false, BoardPosition positionToMoveActivePlayer = {-1, -1});
     bool didPromoteActivePawn();
     void switchRound();
