@@ -315,11 +315,22 @@ void GameView::mouseMoveEvent(QMouseEvent *event) {
 
 
 void GameView::selectPawn(PawnField *pawn) {
+
+    // ==========================================================
+    // ===== [핵심 방어막] 허공(빈 칸)을 클릭해서 체스말이 없다면 즉시 종료! =====
     if (pawn == nullptr) {
+        board->clearHighlights(); // 허공을 누르면 켜져있던 불도 끕니다
+        boardViewModel.discardActivePawn(); // 선택된 말도 취소합니다
         return;
     }
+    // ==========================================================
 
     boardViewModel.setActivePawnForField(pawn);
+
+    // ===== 추가: 말이 선택되었으므로 갈 수 있는 범위 표시 =====
+    if(boardViewModel.getActivePawn() != nullptr) {
+        board->showValidMoves(boardViewModel.getActivePawn(), &boardViewModel);
+    }
 }
 
 // 2. 패킷 전송 로직 수정 (문제 2 해결)
@@ -348,6 +359,12 @@ void GameView::handleSelectingPointForActivePawnByMouse(QPoint point) {
     moveActivePawnToSelectedPoint(point);
 
     // 승급 체크
+    if (board != nullptr)
+    {
+    board->clearHighlights();
+    }
+
+    // check if pawn can be promoted
     if (boardViewModel.didPromoteActivePawn()) {
         board->promotePawnAtBoardPosition(toPosition);
     }
@@ -455,8 +472,10 @@ void GameView::releaseActivePawn() {
     }
 
     BasePawnModel *activePawn = boardViewModel.getActivePawn();
+    board->clearHighlights();
     board->placeActivePawnAtBoardPosition(activePawn, activePawn->position);
     board->setPawnMoveCheckWarning(false);
+    boardViewModel.discardActivePawn();
     boardViewModel.discardActivePawn();
 }
 

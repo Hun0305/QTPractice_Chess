@@ -7,6 +7,7 @@
 #include "gameview.h"
 #include "pawnfield.h"
 #include "utils.h"
+#include "boardview.h"
 
 extern GameView *game;
 
@@ -99,9 +100,9 @@ PawnField* BoardView::getPawnAtMousePosition(QPoint point) {
         QPointF pawnPos = pawn->pos();
 
         if ((point.x() < (pawnPos.x() + pawn->rect().width())) &&
-                (point.x() > pawnPos.x()) &&
-                (point.y() < (pawnPos.y() + pawn->rect().height())) &&
-                (point.y() > pawnPos.y())) {
+            (point.x() > pawnPos.x()) &&
+            (point.y() < (pawnPos.y() + pawn->rect().height())) &&
+            (point.y() > pawnPos.y())) {
             return pawn;
         }
     }
@@ -219,4 +220,37 @@ QPointF BoardView::getCoordinatesForBoardPosition(BoardPosition position) {
     int yPosition = startYPosition + position.y*BoardField::defaultWidthHeight;
 
     return QPointF(xPosition, yPosition);
+}
+
+void BoardView::showValidMoves(BasePawnModel* pawn, BoardViewModel* viewModel) {
+    // [방어 1] 말이나 뷰모델이 존재하지 않으면 즉시 중지
+    if (pawn == nullptr || viewModel == nullptr) return;
+
+    // [방어 2] 보드판 칸 리스트가 비어있으면 중지
+    if (fields.isEmpty()) return;
+
+    for (int i = 0; i < fields.length(); i++) {
+        BoardField *field = fields[i];
+
+        // [방어 3] 칸 자체가 메모리에서 날아갔거나 null이면 건너뜀
+        if (field == nullptr) continue;
+
+        BoardPosition targetPos = field->getPosition();
+
+        // 기존 100% 로직
+        if (viewModel->validatePawnMove(targetPos, pawn)) {
+            field->setHighlight(true);
+        }
+    }
+}
+
+void BoardView::clearHighlights() {
+    if (fields.isEmpty()) return;
+
+    for (int i = 0; i < fields.length(); i++) {
+        // [방어 4] null이 아닐 때만 색을 원래대로 복구
+        if (fields[i] != nullptr) {
+            fields[i]->setHighlight(false);
+        }
+    }
 }
