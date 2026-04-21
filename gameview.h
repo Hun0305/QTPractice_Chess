@@ -10,6 +10,9 @@
 #include "pawnfield.h"
 #include "playerview.h"
 #include "networkmanager.h"
+#include <QTextEdit>
+#include <QGraphicsProxyWidget>
+#include <QTime>
 
 class GameView : public QGraphicsView {
     Q_OBJECT
@@ -24,11 +27,15 @@ public slots:
     void hostGame();
     void startGame();
     void quitGame();
-    void resetGame();
+    void resignGame(); // 기존 resetGame() 대신 사용할 함수
     void onDataReceived(QString data); // 네트워크 데이터 처리 슬롯
+    void addLog(QString message); // 로그 메시지 추가 함수
 
 private:
     NetworkManager *networkManager;
+
+    QTextEdit *logWindow; // 로그를 출력할 위젯
+    QString getChessNotation(BoardPosition pos); // 좌표를 A1, D4 형식으로 변환
 
     BoardViewModel boardViewModel;
     bool gameStarted;

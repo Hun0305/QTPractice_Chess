@@ -9,6 +9,9 @@ int PlayerView::defaultWidthHeight = 200;
 extern GameView *game;
 
 PlayerView::PlayerView(QGraphicsItem *parent): QGraphicsRectItem(parent) {
+    titleTextItem = nullptr;
+    checkTextItem = nullptr;
+
     QColor backgroundColor = QColor(55, 51, 63);
     Utils::setBackgroundColor(backgroundColor, this);
     setPen(Qt::NoPen);
@@ -20,21 +23,25 @@ void PlayerView::setPlayer(PlayerType owner) {
 
     switch (owner) {
     case PlayerType::black:
-        title = "Black Player";
+        title = "Black's Turn";
         imagePath = ":Images/pawn_black.svg";
         break;
     case PlayerType::white:
-        title = "White Player";
+        title = "White's Turn";
         imagePath = ":Images/pawn_white.svg";
         break;
     }
 
     // set title
-    QGraphicsTextItem *titleItem = Utils::createTextItem(title, 18, Constants::defaultTextColor, this);
+    // [수정] 자료형(QGraphicsTextItem *)을 제거하여 멤버 변수 titleTextItem을 사용합니다.
+    titleTextItem = Utils::createTextItem(title, 18, Constants::defaultTextColor, this);
 
-    double titleXPosition = this->boundingRect().x() + this->boundingRect().width()/2 - titleItem->boundingRect().width()/2;
-    double titleYPosition = this->boundingRect().y() + defaultWidthHeight - titleItem->boundingRect().height()/2 - Constants::defaultMargin;
-    titleItem->setPos(titleXPosition, titleYPosition);
+    double titleXPosition = this->boundingRect().x() + this->boundingRect().width()/2 - titleTextItem->boundingRect().width()/2;
+    double titleYPosition = this->boundingRect().y() + defaultWidthHeight - titleTextItem->boundingRect().height()/2 - Constants::defaultMargin - 150;
+    titleTextItem->setPos(titleXPosition, titleYPosition);
+
+    // 초기 상태 설정
+    titleTextItem->setVisible(false);
 
     // set image
     PawnField *pawn = new PawnField({ 0, 0 }, imagePath, this);
@@ -55,16 +62,15 @@ void PlayerView::setPlayer(PlayerType owner) {
 }
 
 void PlayerView::setActive(bool active) {
-    QColor borderColor;
-
-    if (active) {
-        borderColor = QColor(157, 128, 101);
-    } else {
-        borderColor = QColor(55, 51, 63);
-    }
+    QColor borderColor = active ? QColor(157, 128, 101) : QColor(55, 51, 63);
 
     QPen pen(borderColor);
     setPen(pen);
+
+    // 2. 포인터가 유효한지(setPlayer가 실행되었는지) 확인 후 접근
+    if (titleTextItem != nullptr) {
+        titleTextItem->setVisible(active);
+    }
 }
 
 void PlayerView::setIsInCheck(bool isCheck) {

@@ -18,6 +18,7 @@ public:
 
 private:
     QGraphicsTextItem *checkTextItem;
+    QGraphicsTextItem *titleTextItem;
 };
 
 #endif // PLAYERVIEW_H

@@ -61,7 +61,10 @@ void GameView::displayRoomList() {
     scene->clear(); // 현재 화면 지우기
 
     // 1. 제목 그리기
-    drawTitle(50, 40);
+    QGraphicsTextItem *title = Utils::createTextItem("Lobby", 40, Qt::white);
+    double xPosition = this->width()/2 - title->boundingRect().width()/2;
+    title->setPos(xPosition, 50);
+    scene->addItem(title);
 
     // 2. 테이블 헤더 설정 (간격 조절)
     int startY = 150;
@@ -165,12 +168,6 @@ void GameView::quitGame() {
     close();
 }
 
-void GameView::resetGame() {
-    gameStarted = false;
-    scene->clear();
-    startGame();
-}
-
 void GameView::drawBoard() {
     board = new BoardView();
     board->draw();
@@ -179,30 +176,76 @@ void GameView::drawBoard() {
 }
 
 void GameView::drawSettingsPanel() {
-    // create quit button
-    ActionButton *resetButton = new ActionButton("Reset game");
-    double resetXPosition = 690 + resetButton->boundingRect().width()/2;
-    double resetYPosition = 420;
-    resetButton->setPos(resetXPosition, resetYPosition);
+    // create resign button
+    ActionButton *resignButton = new ActionButton("Resign"); // 이름 변경
+    double resignXPosition = 680;
+    double resignYPosition = 620;
+    resignButton->setPos(resignXPosition, resignYPosition);
 
-    connect(resetButton, SIGNAL(buttonPressed()), this, SLOT(resetGame()));
-    scene->addItem(resetButton);
+    connect(resignButton, SIGNAL(buttonPressed()), this, SLOT(resignGame()));
+    scene->addItem(resignButton);
 
     // create quit button
-    ActionButton *quitButton = new ActionButton("Quit game");
-    double quitXPosition = 690 + quitButton->boundingRect().width()/2;
-    double quitYPosition = 490;
+    ActionButton *quitButton = new ActionButton("Quit Game");
+    double quitXPosition = 680 + PlayerView::defaultWidthHeight + 20;
+    double quitYPosition = 620;
     quitButton->setPos(quitXPosition, quitYPosition);
 
     connect(quitButton, SIGNAL(buttonPressed()), this, SLOT(quitGame()));
     scene->addItem(quitButton);
 }
 
+void GameView::resignGame() {
+    if (!gameStarted) return;
+
+    // 1. 네트워크를 통해 상대방에게 항복 선언 전달 (구분자 ';' 포함)
+    if (networkManager) {
+        networkManager->sendMove("RESIGN");
+    }
+
+    // 2. 항복한 쪽의 반대 색상이 승리자
+    PlayerType winner = (myColor == PlayerType::white) ? PlayerType::black : PlayerType::white;
+
+    // 3. 승리 화면 띄우기
+    showCongratulationsScreen(winner);
+}
+
 void GameView::drawUserPanel() {
     blackPlayerView = drawViewForUser(PlayerType::black);
     whitePlayerView = drawViewForUser(PlayerType::white);
 
+    // 로그 창 생성
+    logWindow = new QTextEdit();
+    logWindow->setReadOnly(true); // 수정 불가
+    logWindow->setFixedSize(425, 300); // 크기 설정
+    logWindow->setStyleSheet(
+        "background-color: rgba(30, 30, 35, 200);"
+        "color: #9D8065;"
+        "border: 1px solid #9D8065;"
+        "font-family: 'Courier New';"
+        "font-size: 14px;"
+        );
+
+    // GraphicsScene에 위젯 임베딩
+    QGraphicsProxyWidget *proxy = scene->addWidget(logWindow);
+    proxy->setPos(680, 275); // PlayerView 아래, 버튼 위 빈 공간에 배치
+
     blackPlayerView->setActive(true);
+}
+
+// 로그 메시지 추가
+void GameView::addLog(QString message) {
+    if (logWindow) {
+        logWindow->append("[" + QTime::currentTime().toString("hh:mm:ss") + "] " + message);
+        logWindow->ensureCursorVisible(); // 자동 스크롤
+    }
+}
+
+// (0,0) -> "A1" 형태로 변환하는 도우미 함수
+QString GameView::getChessNotation(BoardPosition pos) {
+    char column = 'A' + pos.x;
+    int row = pos.y + 1;
+    return QString("%1%2").arg(column).arg(row);
 }
 
 PlayerView* GameView::drawViewForUser(PlayerType player) {
@@ -221,7 +264,7 @@ PlayerView* GameView::drawViewForUser(PlayerType player) {
     }
 
     scene->addItem(playerView);
-    playerView->setRect(xPosition, yPosition, PlayerView::defaultWidthHeight, PlayerView::defaultWidthHeight);
+    playerView->setRect(xPosition, yPosition, PlayerView::defaultWidthHeight, PlayerView::defaultWidthHeight/2);
     playerView->setPlayer(player);
 
     return playerView;
@@ -318,6 +361,13 @@ void GameView::handleSelectingPointForActivePawnByMouse(QPoint point) {
         qDebug() << "Critical Error: networkManager is null on Host!";
     }
 
+    // 이동 성공 시점에 추가
+    QString pawnName = "Piece"; // 실제 구현 시 activePawn->type에 따라 "Pawn", "Queen" 등으로 분기 가능
+    addLog(QString("<b>Move %1</b> from %2 to %3")
+               .arg(pawnName)
+               .arg(getChessNotation(fromPosition))
+               .arg(getChessNotation(toPosition)));
+
     // 마무리 로직
     boardViewModel.switchRound();
     boardViewModel.discardActivePawn();
@@ -330,8 +380,17 @@ void GameView::onDataReceived(QString data) {
     QStringList messages = data.split(";", Qt::SkipEmptyParts);
 
     for (const QString& singleMove : messages) {
+
+        if (singleMove == "RESIGN") {
+            // 상대방이 항복했으므로 내(myColor)가 승리자
+            addLog("<font color='red'>Opposite Resigned the game.</font>");
+            showCongratulationsScreen(myColor);
+            return;
+        }
+
         QStringList parts = singleMove.split("|");
         if (parts.size() < 5 || parts[0] != "MOVE") continue;
+
 
         int fx = parts[1].toInt();
         int fy = parts[2].toInt();
@@ -340,6 +399,7 @@ void GameView::onDataReceived(QString data) {
 
         BoardPosition from(fx, fy);
         BoardPosition to(tx, ty);
+        addLog(QString("Opponent moved to %1").arg(getChessNotation(to)));
 
         PawnField* remotePawn = board->getPawnAtBoardPosition(from);
         if (remotePawn) {
