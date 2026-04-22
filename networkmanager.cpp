@@ -39,23 +39,24 @@ void NetworkManager::sendMove(QString moveData) {
 }
 
 // =========================================================================
-// [수정 완료] startBroadcasting: 닉네임(hostName) 인자를 추가하여 패킷을 보냅니다.
+// [수정] startBroadcasting: 닉네임(hostName)을 추가로 받아 저장합니다.
 // =========================================================================
 void NetworkManager::startBroadcasting(QString roomName, int tcpPort, QString hostName) {
     udpBroadcastSocket = new QUdpSocket(this);
     broadcastTimer = new QTimer(this);
     currentRoomName = roomName;
     currentTcpPort = tcpPort;
-    currentHostName = hostName; // 헤더에 선언된 변수에 저장
+    currentHostName = hostName; // 헤더에 추가한 변수에 저장
 
     connect(broadcastTimer, &QTimer::timeout, this, &NetworkManager::sendBroadcast);
     broadcastTimer->start(1000);
 }
 
 void NetworkManager::sendBroadcast() {
-    // 패킷 형태 수정: "CHESS_LAN|방이름|TCP포트|닉네임" (4단 구성)
+    // 패킷 형태: "CHESS_LAN|방이름|TCP포트|닉네임" (4개로 확장)
     QString msg = QString("CHESS_LAN|%1|%2|%3").arg(currentRoomName).arg(currentTcpPort).arg(currentHostName);
     QByteArray datagram = msg.toUtf8();
+
     udpBroadcastSocket->writeDatagram(datagram, QHostAddress::Broadcast, 45454);
 }
 
@@ -64,9 +65,6 @@ void NetworkManager::stopBroadcasting() {
     if (udpBroadcastSocket) { udpBroadcastSocket->deleteLater(); udpBroadcastSocket = nullptr; }
 }
 
-// =========================================================================
-// [수정 완료] 로비 리스닝: 받은 패킷에서 닉네임까지 추출해서 UI에 전달합니다.
-// =========================================================================
 void NetworkManager::startListeningForGames() {
     if (!udpListenSocket) {
         udpListenSocket = new QUdpSocket(this);
@@ -79,6 +77,9 @@ void NetworkManager::stopListeningForGames() {
     if (udpListenSocket) { udpListenSocket->deleteLater(); udpListenSocket = nullptr; }
 }
 
+// =========================================================================
+// [수정] processPendingDatagrams: 닉네임까지 추출해서 4개의 인자를 emit 합니다.
+// =========================================================================
 void NetworkManager::processPendingDatagrams() {
     while (udpListenSocket && udpListenSocket->hasPendingDatagrams()) {
         QByteArray datagram;
@@ -91,16 +92,16 @@ void NetworkManager::processPendingDatagrams() {
         QString data = QString::fromUtf8(datagram);
         QStringList parts = data.split("|");
 
-        // [에러 해결 핵심] parts.size()가 4인 경우(닉네임 포함)를 처리합니다.
+        // 닉네임이 포함되었으므로 조각이 4개 이상이어야 합니다.
         if (parts.size() >= 4 && parts[0] == "CHESS_LAN") {
             QString roomName = parts[1];
             int tcpPort = parts[2].toInt();
-            QString hostName = parts[3]; // 4번째 데이터인 닉네임 추출
+            QString hostName = parts[3]; // 닉네임 조각 추출
 
             QString ip = sender.toString();
             if (ip.startsWith("::ffff:")) ip = ip.mid(7);
 
-            // [에러 해결!] 헤더에 약속한 대로 4개의 정보를 모두 쏴줍니다.
+            // [에러 해결!] 이제 4개의 인자(ip, port, roomName, hostName)를 모두 보냅니다.
             emit gameDiscovered(ip, tcpPort, roomName, hostName);
         }
     }
