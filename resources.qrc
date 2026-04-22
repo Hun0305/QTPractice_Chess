@@ -13,5 +13,7 @@
         <file>Images/rook_black.svg</file>
         <file>Images/rook_white.svg</file>
         <file>Images/confetti.svg</file>
+        <file>Images/CHESS.png</file>
+        <file>Images/VEDA.png</file>
     </qresource>
 </RCC>

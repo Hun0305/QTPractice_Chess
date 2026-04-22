@@ -54,12 +54,37 @@ void GameView::displayMainMenu() {
 
     // create title label
     double titleYPosition = 150;
-    drawTitle(titleYPosition, 50);
+    //drawTitle(titleYPosition, 50);
 
+    QPixmap vedaPixmap(":/Images/VEDA.png");
+    QPixmap chessPixmap(":/Images/CHESS.png");
+
+    // 3. QGraphicsPixmapItem 생성 및 씬에 추가
+    QGraphicsPixmapItem *vedaItem = scene->addPixmap(vedaPixmap);
+    QGraphicsPixmapItem *chessItem = scene->addPixmap(chessPixmap);
+
+    // 2. 크기 조절 (예: 0.5를 넣으면 절반 크기로, 1.5를 넣으면 1.5배로 커짐)
+    qreal scaleFactor = 0.5; // 원하는 배율로 수정하세요!
+    vedaItem->setScale(0.15);
+    chessItem->setScale(0.4);
+
+    // 3. 조절된 크기를 기준으로 넓이 계산
+    qreal scaledVedaWidth = vedaPixmap.width() * scaleFactor;
+    qreal scaledChessWidth = chessPixmap.width() * scaleFactor;
+
+    int spacing = 20; // 두 이미지 사이의 간격
+    qreal totalWidth = scaledVedaWidth + spacing + scaledChessWidth;
+
+    // 4. 화면 중앙을 기준으로 X, Y 좌표 계산 및 배치
+    qreal startX = (this->width() - totalWidth) / 2 + 750;
+    qreal centerY = 150; // 높이 (적절히 조절)
+
+    vedaItem->setPos(startX, centerY + 100);
+    chessItem->setPos(startX + spacing + 520, centerY+30);
     // create start button
     ActionButton *startButton = new ActionButton("Play");
     double buttonXPosition = this->width()/2 - startButton->boundingRect().width()/2;
-    double buttonYPosition = 275;
+    double buttonYPosition = 475;
     startButton->setPos(buttonXPosition, buttonYPosition);
 
     connect(startButton, SIGNAL(buttonPressed()), this, SLOT(displayRoomList()));
@@ -68,7 +93,7 @@ void GameView::displayMainMenu() {
     // create quit button
     ActionButton *quitButton = new ActionButton("Quit");
     double quitXPosition = this->width()/2 - quitButton->boundingRect().width()/2;
-    double quitYPosition = 350;
+    double quitYPosition = 550;
     quitButton->setPos(quitXPosition, quitYPosition);
 
     connect(quitButton, SIGNAL(buttonPressed()), this, SLOT(quitGame()));
@@ -313,7 +338,7 @@ PlayerView* GameView::drawViewForUser(PlayerType player) {
 }
 
 void GameView::drawTitle(double yPosition, int fontSize) {
-    QGraphicsTextItem *title = Utils::createTextItem("Chess Game", fontSize, Qt::white);
+    QGraphicsTextItem *title = Utils::createTextItem("VEDA CHESS", fontSize, Qt::white);
     double xPosition = this->width()/2 - title->boundingRect().width()/2;
     title->setPos(xPosition, yPosition);
     scene->addItem(title);
