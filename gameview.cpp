@@ -412,17 +412,19 @@ void GameView::handleSelectingPointForActivePawnByMouse(QPoint point) {
     board->setPawnMoveCheckWarning(isKingInCheck);
     if (isKingInCheck) return;
 
+    // [수정된 부분] 적을 지우기 전에 해당 위치의 말이 킹인지 먼저 기록합니다!
+    bool isEnemyKing = boardViewModel.isKingAtPosition(toPosition);
+
     // 상대 기물 제거 로직
     if (boardViewModel.didRemoveEnemyOnBoardPosition(toPosition)) {
 
-        if (boardViewModel.isKingAtPosition(toPosition)) {
+        if (isEnemyKing) { // 미리 확인해둔 변수를 사용!
             if (networkManager) {
-                // static_cast<int>를 추가하여 Enum을 숫자로 변환합니다.
                 QString gameOverPacket = QString("GAMEOVER|%1").arg(static_cast<int>(myColor));
                 networkManager->sendMove(gameOverPacket);
             }
-            showCongratulationsScreen(myColor);
             board->removePawnAtBoardPosition(toPosition);
+            showCongratulationsScreen(myColor); // 이제 정상적으로 승리 화면이 뜹니다!
             return;
         }
 
@@ -575,17 +577,20 @@ void GameView::releaseActivePawn() {
 }
 
 void GameView::showCongratulationsScreen(PlayerType winner) {
-    gameStarted = false;
+    if (!gameStarted) return; // 중복 실행 방지
+    gameStarted = false; // 마우스 클릭 이벤트 차단
 
-    // [중요] 결과창이 뜨기 직전에 DB에 전적을 기록합니다.
+    // 1. DB 업데이트 수행
     bool amIWinner = (winner == myColor);
     updateDatabaseResult(amIWinner);
 
-    scene->clear();
-    // CongratulationsView 생성 (이전 단계에서 수정한 대로 인자 2개 전달)
-    CongratulationsView *congratulationsView = new CongratulationsView(winner, myColor);
-    congratulationsView->setRect(0, 0, width(), height());
-    scene->addItem(congratulationsView); // 씬에 추가하는 것 잊지 마세요!
+    // 2. scene->clear() 삭제!!! (이것이 튕김의 주범이었습니다)
+
+    // 3. 기존 화면 위에 반투명 결과창 띄우기 (this를 넘겨줍니다)
+    CongratulationsView *conView = new CongratulationsView(winner, myColor, this);
+    conView->setRect(0, 0, width(), height());
+    conView->setZValue(100); // 체스판보다 무조건 맨 위에 오도록 설정
+    scene->addItem(conView);
 }
 
 void GameView::globalHostGame() {
@@ -625,12 +630,10 @@ void GameView::globalJoinGame() {
     }
 }
 
+#include <QThread> // 파일 상단에 추가
+
 void GameView::updateDatabaseResult(bool isWinner) {
-    // 1단계에서 전달받은 ID가 있는지 확인
-    if (loggedInUserId.isEmpty()) {
-        qDebug() << "로그인 정보가 없어 전적을 업데이트할 수 없습니다.";
-        return;
-    }
+    if (loggedInUserId.isEmpty()) return;
 
     QSqlQuery query;
     if (isWinner) {
@@ -640,9 +643,18 @@ void GameView::updateDatabaseResult(bool isWinner) {
     }
     query.bindValue(":id", loggedInUserId);
 
-    if (!query.exec()) {
-        qDebug() << "전적 업데이트 실패:" << query.lastError().text();
-    } else {
-        qDebug() << "전적 기록 성공! 유저:" << loggedInUserId << " 결과:" << (isWinner ? "승리" : "패배");
+    // 동시 쓰기(Lock) 충돌 방지를 위한 재시도 로직
+    bool success = false;
+    for (int i = 0; i < 10; ++i) {
+        if (query.exec()) {
+            success = true;
+            qDebug() << "전적 기록 성공! 유저:" << loggedInUserId << (isWinner ? "승리" : "패배");
+            break; // 성공하면 루프 탈출
+        }
+        QThread::msleep(50); // 실패 시 0.05초 대기 후 다시 시도
+    }
+
+    if (!success) {
+        qDebug() << "DB 업데이트 최종 실패:" << query.lastError().text();
     }
 }

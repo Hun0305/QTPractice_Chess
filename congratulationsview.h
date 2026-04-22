@@ -5,12 +5,13 @@
 #include <QObject>
 #include "basepawnmodel.h"
 
+class GameView; // 전방 선언 추가
+
 class CongratulationsView: public QObject, public QGraphicsRectItem {
     Q_OBJECT
-
 public:
-    // winner: 이긴 사람, myColor: 현재 이 화면을 보고 있는 나
-    CongratulationsView(PlayerType winner, PlayerType myColor);
+    // QWidget 대신 GameView 포인터를 받도록 수정
+    CongratulationsView(PlayerType winner, PlayerType myColor, GameView *gameView = nullptr);
 };
 
 #endif
