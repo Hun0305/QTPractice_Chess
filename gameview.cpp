@@ -654,7 +654,7 @@ void GameView::showHostGameSettings() {
     nameLabelProxy->setPos(labelX, startY);
 
     roomNameInput = new QLineEdit("My Chess Room");
-    roomNameInput->setFixedSize(200, 30);
+    roomNameInput->setFixedSize(200, 45);
     roomNameInput->setStyleSheet("background-color: white; color: black; font-size: 16px;");
     QGraphicsProxyWidget *nameInputProxy = scene->addWidget(roomNameInput);
     nameInputProxy->setPos(inputX, startY);
@@ -667,7 +667,7 @@ void GameView::showHostGameSettings() {
 
     networkModeInput = new QComboBox();
     networkModeInput->addItems({"Local (LAN)", "Global (Public IP)"});
-    networkModeInput->setFixedSize(200, 30);
+    networkModeInput->setFixedSize(200, 45);
     networkModeInput->setStyleSheet("background-color: white; color: black; font-size: 16px;");
     QGraphicsProxyWidget *modeInputProxy = scene->addWidget(networkModeInput);
     modeInputProxy->setPos(inputX, startY + spacing);
@@ -681,7 +681,7 @@ void GameView::showHostGameSettings() {
     portLabelProxy->setPos(labelX, startY + spacing * 2);
 
     portInput = new QLineEdit("12345");
-    portInput->setFixedSize(200, 30);
+    portInput->setFixedSize(200, 45);
     portInput->setStyleSheet("background-color: white; color: black; font-size: 16px;");
     QGraphicsProxyWidget *portInputProxy = scene->addWidget(portInput);
     portInputProxy->setPos(inputX, startY + spacing * 2);
