@@ -396,3 +396,14 @@ PlayerType BoardViewModel::getPawnColorAtPosition(BoardPosition position) {
     // 기물이 없는 경우 기본값 반환 (이 함수는 보통 기물이 있을 때만 호출됨)
     return PlayerType::white;
 }
+
+bool BoardViewModel::isKingAtPosition(BoardPosition pos) {
+    // 1. 해당 좌표의 기물을 가져옵니다.
+    BasePawnModel* pawn = getPawnOnBoardPosition(pos);
+
+    // 2. 기물이 존재하고, 타입이 'king'인지 확인합니다.
+    if (pawn != nullptr && pawn->type == PawnType::king) {
+        return true;
+    }
+    return false;
+}

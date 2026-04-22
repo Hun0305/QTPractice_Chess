@@ -9,9 +9,16 @@ int main(int argc, char *argv[]) {
 
     LoginWindow login;
     if (login.exec() == QDialog::Accepted) {
-        game = new GameView();
-        game->displayMainMenu(); // 기존 mdziubich 소스의 메뉴 호출
-        game->show();
+        QString userId = login.getLoggedInId(); // 로그인창에서 ID 가져오기
+
+        GameView *gameView = new GameView();
+
+        // [수정된 부분] public 함수인 setLoggedInUser를 통해 ID를 전달합니다.
+        gameView->setLoggedInUser(userId);
+
+        gameView->displayMainMenu();
+        gameView->show();
+
         return a.exec();
     }
 

@@ -23,6 +23,8 @@ public:
     GameView();
     QGraphicsScene *scene;
 
+
+
 public slots:
     void displayRoomList();
     void displayMainMenu();
@@ -34,6 +36,7 @@ public slots:
     void addLog(QString message); // 로그 메시지 추가 함수
     void globalHostGame();
     void globalJoinGame();
+    void setLoggedInUser(QString id) { loggedInUserId = id; } // 아이디 설정 함수
     void showHostGameSettings(); // 방 생성 설정 화면 띄우기
     void confirmHostGame();      // 설정 완료 후 호스팅 시작
     void onGameDiscovered(QString ip, int port, QString roomName);
@@ -56,6 +59,7 @@ private:
     BoardView *board;
     PlayerView *blackPlayerView;
     PlayerView *whitePlayerView;
+    QString loggedInUserId; // 로그인한 유저의 ID를 저장
 
     PlayerType myColor; // 내 색상 저장 (호스트=White, 조인=Black)
     void executeMove(BoardPosition from, BoardPosition to); // 실제 이동 로직 분리
@@ -73,6 +77,7 @@ private:
     void moveActivePawnToSelectedPoint(QPoint point);
     void releaseActivePawn();
     void showCongratulationsScreen(PlayerType winner);
+    void updateDatabaseResult(bool isWinner);
 };
 
 #endif // GAME_H

@@ -7,6 +7,9 @@
 #include "constants.h"
 #include "utils.h"
 #include <QInputDialog> // 상단에 추가
+#include "rankingdialog.h"
+#include <QSqlQuery>
+#include <QSqlError>
 #include <QLabel>
 #include <QGraphicsProxyWidget>
 
@@ -61,6 +64,19 @@ void GameView::displayMainMenu() {
 }
 
 void GameView::displayRoomList() {
+    if (scene) {
+        scene->clear(); // 여기서 죽는다면, 이전 아이템에 연결된 시그널이 문제일 수 있습니다.
+    }
+
+    // --- [추가] 오른쪽 상단 로그인 정보 표시 ---
+    if (!loggedInUserId.isEmpty()) {
+        QGraphicsTextItem *userInfo = Utils::createTextItem("닉네임: " + loggedInUserId, 15, Qt::yellow);
+        // 오른쪽 구석 좌표 계산 (여백 20)
+        double infoX = this->width() - userInfo->boundingRect().width() - 20;
+        double infoY = 20;
+        userInfo->setPos(infoX, infoY);
+        scene->addItem(userInfo);
+    }
     scene->clear(); // 현재 화면 지우기
     discoveredRooms.clear(); // 검색된 방 목록 초기화
     nextRoomY = 220;         // 헤더(150) 아래에 첫 번째 방이 나타날 위치
@@ -116,60 +132,71 @@ void GameView::displayRoomList() {
     */
 
     // 3. 더미 방 목록 데이터 루프 (예시 3개)
-    struct Room { QString name; QString players; };
-    QList<Room> rooms = { {"Software Chess", "1/2"}, {"PVP Challenge", "1/2"}, {"Wait for King", "0/2"} };
+//     struct Room { QString name; QString players; };
+//     QList<Room> rooms = { {"Software Chess", "1/2"}, {"PVP Challenge", "1/2"}, {"Wait for King", "0/2"} };
 
-    // for(int i = 0; i < rooms.size(); ++i) {
-    //     int rowY = startY + 60 + (i * 70); // 행 간격
+//     for(int i = 0; i < rooms.size(); ++i) {
+//         int rowY = startY + 60 + (i * 70); // 행 간격
 
-    //     // 방 이름
-    //     QGraphicsTextItem *rName = Utils::createTextItem(rooms[i].name, 18, Qt::lightGray);
-    //     rName->setPos(col1, rowY + 10);
-    //     scene->addItem(rName);
+//         // 방 이름
+//         QGraphicsTextItem *rName = Utils::createTextItem(rooms[i].name, 18, Qt::lightGray);
+//         rName->setPos(col1, rowY + 10);
+//         scene->addItem(rName);
 
-    //     // 인원 수
-    //     QGraphicsTextItem *rPlayers = Utils::createTextItem(rooms[i].players, 18, Qt::lightGray);
-    //     rPlayers->setPos(col3, rowY + 10);
-    //     scene->addItem(rPlayers);
+//         // 인원 수
+//         QGraphicsTextItem *rPlayers = Utils::createTextItem(rooms[i].players, 18, Qt::lightGray);
+//         rPlayers->setPos(col3, rowY + 10);
+//         scene->addItem(rPlayers);
 
-    //     // Join 버튼 (기존 ActionButton 재활용)
-    //     ActionButton *joinBtn = new ActionButton("Join");
-    //     joinBtn->setPos(col4, rowY);
-    //     joinBtn->setScale(0.7); // 리스트용으로 조금 작게 조절
-    //     // 수정된 코드
-    //     connect(joinBtn, &ActionButton::buttonPressed, this, [this](){
-    //         myColor = PlayerType::black;
+//         // Join 버튼 (기존 ActionButton 재활용)
+//         ActionButton *joinBtn = new ActionButton("Join");
+//         joinBtn->setPos(col4, rowY);
+//         joinBtn->setScale(0.7); // 리스트용으로 조금 작게 조절
+//         // 수정된 코드
+//         connect(joinBtn, &ActionButton::buttonPressed, this, [this](){
+//             myColor = PlayerType::black;
 
-    //         // 1. 인스턴스 생성 (누락되었던 부분)
-    //         if (!networkManager) {
-    //             networkManager = new NetworkManager(this);
-    //         }
+//             // 1. 인스턴스 생성 (누락되었던 부분)
+//             if (!networkManager) {
+//                 networkManager = new NetworkManager(this);
+//             }
 
-    //         // 2. 시그널 연결을 먼저 수행하는 것이 안전합니다.
-    //         connect(networkManager, &NetworkManager::dataReceived, this, &GameView::onDataReceived);
-    //         connect(networkManager, &NetworkManager::connected, this, &GameView::startGame);
+//             // 2. 시그널 연결을 먼저 수행하는 것이 안전합니다.
+//             connect(networkManager, &NetworkManager::dataReceived, this, &GameView::onDataReceived);
+//             connect(networkManager, &NetworkManager::connected, this, &GameView::startGame);
 
-    //         // 3. 서버 접속 시도
-    //         networkManager->connectToHost("127.0.0.1", 12345);
-    //     });
-    //     scene->addItem(joinBtn);
+//             // 3. 서버 접속 시도
+//             networkManager->connectToHost("127.0.0.1", 12345);
+//         });
+//         scene->addItem(joinBtn);
 
-    //     /*
-    //     // global join
-    //     ActionButton *globalJoinBtn = new ActionButton("Global Join");
-    //     globalJoinBtn->setPos(this->width()/2 + 20, 550);
-    //     connect(globalJoinBtn, SIGNAL(buttonPressed()), this, SLOT(globalJoinGame()));
-    //     scene->addItem(globalJoinBtn);
+//         ActionButton *globalJoinBtn = new ActionButton("Global Join");
+//         globalJoinBtn->setPos(this->width()/2 + 20, 550);
+//         connect(globalJoinBtn, SIGNAL(buttonPressed()), this, SLOT(globalJoinGame()));
+//         scene->addItem(globalJoinBtn);
 
-    //     ActionButton *globalHostBtn = new ActionButton("Global Host");
-    //     globalHostBtn->setPos(globalJoinBtn->boundingRect().width() + 180, 550);
-    //     connect(globalHostBtn, SIGNAL(buttonPressed()), this, SLOT(globalHostGame()));
-    //     scene->addItem(globalHostBtn);
-    //     */
-    // }
+//         ActionButton *globalHostBtn = new ActionButton("Global Host");
+//         globalHostBtn->setPos(globalJoinBtn->boundingRect().width() + 180, 550);
+//         connect(globalHostBtn, SIGNAL(buttonPressed()), this, SLOT(globalHostGame()));
+//         scene->addItem(globalHostBtn);
+//     }
 
-    /*
-    // local multiplay join
+    ActionButton *rankingBtn = new ActionButton("Ranking");
+
+    // 위치 설정: "Back to Menu" 버튼의 왼쪽 혹은 적절한 빈 공간
+    // 여기서는 화면 하단 중앙 근처로 배치하겠습니다.
+    rankingBtn->setPos(this->width()/2 - rankingBtn->boundingRect().width() / 2, 480);
+
+    // 버튼 클릭 시 RankingDialog 실행 연결 (람다식 활용)
+    connect(rankingBtn, &ActionButton::buttonPressed, this, [this]() {
+        RankingDialog *dialog = new RankingDialog(this);
+        // 창이 닫히면 메모리에서 자동으로 삭제되도록 설정
+        dialog->setAttribute(Qt::WA_DeleteOnClose);
+        dialog->show();
+    });
+    scene->addItem(rankingBtn);
+
+    // 4. 뒤로가기 버튼
     ActionButton *hostButton = new ActionButton("Host Game");
     // 위치를 "Back to Menu" 버튼 옆으로 잡습니다.
     hostButton->setPos(this->width()/2 - hostButton->boundingRect().width() - 20, 650);
@@ -193,29 +220,47 @@ void GameView::displayRoomList() {
 
 // 방 만들기 버튼 클릭 시 실행될 함수
 void GameView::hostGame() {
-    myColor = PlayerType::white; // 방장은 흰색
-    networkManager = new NetworkManager(this);
-    if (networkManager->startHosting()) {
-        qDebug() << "Server started! Waiting for player...";
-        // 연결될 때까지 대기 메시지 표시 (UI 작업)
-        connect(networkManager, &NetworkManager::connected, this, [this](){
-            startGame(); // 상대방 접속 시 게임 시작
-        });
+    myColor = PlayerType::white;
+
+    // 1. 기존 매니저와 시그널을 확실히 정리
+    if (networkManager) {
+        networkManager->disconnect(); // 모든 연결 끊기
+        networkManager->deleteLater();
+        networkManager = nullptr;
     }
-    connect(networkManager, &NetworkManager::dataReceived, this, &GameView::onDataReceived);
+
+    networkManager = new NetworkManager(this);
+
+    // 2. 연결을 한 번만 수행
+    connect(networkManager, &NetworkManager::connected, this, &GameView::startGame, Qt::UniqueConnection);
+    connect(networkManager, &NetworkManager::dataReceived, this, &GameView::onDataReceived, Qt::UniqueConnection);
+
+    networkManager->startHosting();
 }
 
 void GameView::startGame() {
+    gameStarted = false;
 
-    scene->clear();
+    if (scene) {
+        scene->clear();
+    }
 
+    // BoardViewModel 초기화 (내부 포인터들이 null로 잘 초기화되는지 확인 필요)
     boardViewModel = BoardViewModel();
 
+    // UI 객체 생성 순서: Board -> Panel -> User
     drawBoard();
     drawSettingsPanel();
     drawUserPanel();
-    int titleYPosition = Constants::defaultMargin;
-    drawTitle(titleYPosition, 40);
+
+    // 닉네임 표시 (중복 생성 방지를 위해 drawUserPanel 이후에 배치)
+    if (!loggedInUserId.isEmpty()) {
+        QGraphicsTextItem *userDisplay = Utils::createTextItem("닉네임 : " + loggedInUserId, 16, QColor("#FFD700"));
+        userDisplay->setPos(this->width() - userDisplay->boundingRect().width() - 20, 20);
+        scene->addItem(userDisplay);
+    }
+
+    drawTitle(Constants::defaultMargin, 40);
     gameStarted = true;
 }
 
@@ -224,7 +269,10 @@ void GameView::quitGame() {
 }
 
 void GameView::drawBoard() {
+    if (!scene) return;
+
     board = new BoardView();
+    scene->addItem(board);
     board->draw();
     board->initializePawnFields(boardViewModel.getBlackPawns());
     board->initializePawnFields(boardViewModel.getWhitePawns());
@@ -405,8 +453,22 @@ void GameView::handleSelectingPointForActivePawnByMouse(QPoint point) {
     board->setPawnMoveCheckWarning(isKingInCheck);
     if (isKingInCheck) return;
 
+    // [수정된 부분] 적을 지우기 전에 해당 위치의 말이 킹인지 먼저 기록합니다!
+    bool isEnemyKing = boardViewModel.isKingAtPosition(toPosition);
+
     // 상대 기물 제거 로직
     if (boardViewModel.didRemoveEnemyOnBoardPosition(toPosition)) {
+
+        if (isEnemyKing) { // 미리 확인해둔 변수를 사용!
+            if (networkManager) {
+                QString gameOverPacket = QString("GAMEOVER|%1").arg(static_cast<int>(myColor));
+                networkManager->sendMove(gameOverPacket);
+            }
+            board->removePawnAtBoardPosition(toPosition);
+            showCongratulationsScreen(myColor); // 이제 정상적으로 승리 화면이 뜹니다!
+            return;
+        }
+
         board->removePawnAtBoardPosition(toPosition);
     }
 
@@ -449,20 +511,35 @@ void GameView::handleSelectingPointForActivePawnByMouse(QPoint point) {
 }
 
 void GameView::onDataReceived(QString data) {
+    // 1. 안전 장치: 게임이 시작되지 않았거나 화면 전환 중이면 무시
+    if (!gameStarted || board == nullptr || scene == nullptr) {
+        return;
+    }
     QStringList messages = data.split(";", Qt::SkipEmptyParts);
 
     for (const QString& singleMove : messages) {
 
+        // --- [RESIGN 처리] ---
         if (singleMove == "RESIGN") {
-            // 상대방이 항복했으므로 내(myColor)가 승리자
-            addLog("<font color='red'>Opposite Resigned the game.</font>");
+            addLog("<font color='red'>Opponent Resigned the game.</font>");
             showCongratulationsScreen(myColor);
             return;
         }
 
+        // --- [GAMEOVER 처리] ---
+        if (singleMove.startsWith("GAMEOVER")) {
+            QStringList parts = singleMove.split("|");
+            if (parts.size() >= 2) {
+                PlayerType winner = static_cast<PlayerType>(parts[1].toInt());
+                addLog("<font color='red'>King has been captured! Game Over.</font>");
+                showCongratulationsScreen(winner);
+                return;
+            }
+        }
+
+        // --- [MOVE 처리] ---
         QStringList parts = singleMove.split("|");
         if (parts.size() < 5 || parts[0] != "MOVE") continue;
-
 
         int fx = parts[1].toInt();
         int fy = parts[2].toInt();
@@ -471,34 +548,40 @@ void GameView::onDataReceived(QString data) {
 
         BoardPosition from(fx, fy);
         BoardPosition to(tx, ty);
-        addLog(QString("Opponent moved to %1").arg(getChessNotation(to)));
+
+        // 2. 객체 참조 전 최종 유효성 검사
+        if (!board) break;
 
         PawnField* remotePawn = board->getPawnAtBoardPosition(from);
         if (remotePawn) {
-            // 1. 모델에서 현재 움직이는 말을 활성화
             boardViewModel.setActivePawnForField(remotePawn);
 
-            // 2. [추가] 목적지에 적이 있다면 제거 로직 실행 (승리 조건 체크 포함)
             if (boardViewModel.didRemoveEnemyOnBoardPosition(to)) {
                 board->removePawnAtBoardPosition(to);
             }
 
-            // 3. 화면 이동 및 모델 좌표 갱신
-            board->placeActivePawnAtBoardPosition(boardViewModel.getActivePawn(), to);
-            boardViewModel.setNewPositionForActivePawn(to);
-
-            // 4. [추가] 승리자가 있는지 확인 (킹이 잡혔는지 체크)
-            if (boardViewModel.getWinner()) {
-                showCongratulationsScreen(*boardViewModel.getWinner());
-                return; // 게임 종료 시 함수 탈출
+            // activePawn이 유효한지 한 번 더 확인
+            if (boardViewModel.getActivePawn()) {
+                board->placeActivePawnAtBoardPosition(boardViewModel.getActivePawn(), to);
+                boardViewModel.setNewPositionForActivePawn(to);
             }
 
-            // 5. 턴 교체 및 마무리
+            // 승리자 체크
+            if (boardViewModel.getWinner()) {
+                showCongratulationsScreen(*boardViewModel.getWinner());
+                return;
+            }
+
             boardViewModel.discardActivePawn();
             boardViewModel.switchRound();
 
-            blackPlayerView->setActive(boardViewModel.getWhosTurn() == PlayerType::black);
-            whitePlayerView->setActive(boardViewModel.getWhosTurn() == PlayerType::white);
+            // UI 갱신 전 포인터 확인
+            if (blackPlayerView && whitePlayerView) {
+                blackPlayerView->setActive(boardViewModel.getWhosTurn() == PlayerType::black);
+                whitePlayerView->setActive(boardViewModel.getWhosTurn() == PlayerType::white);
+            }
+
+            addLog(QString("Opponent moved to %1").arg(getChessNotation(to)));
         }
     }
 }
@@ -535,12 +618,20 @@ void GameView::releaseActivePawn() {
 }
 
 void GameView::showCongratulationsScreen(PlayerType winner) {
-    gameStarted = false;
+    if (!gameStarted) return; // 중복 실행 방지
+    gameStarted = false; // 마우스 클릭 이벤트 차단
 
-    scene->clear();
+    // 1. DB 업데이트 수행
+    bool amIWinner = (winner == myColor);
+    updateDatabaseResult(amIWinner);
 
-    CongratulationsView *congratulationsView = new CongratulationsView(winner);
-    congratulationsView->setRect(0, 0, viewWidth, viewHeight);
+    // 2. scene->clear() 삭제!!! (이것이 튕김의 주범이었습니다)
+
+    // 3. 기존 화면 위에 반투명 결과창 띄우기 (this를 넘겨줍니다)
+    CongratulationsView *conView = new CongratulationsView(winner, myColor, this);
+    conView->setRect(0, 0, width(), height());
+    conView->setZValue(100); // 체스판보다 무조건 맨 위에 오도록 설정
+    scene->addItem(conView);
 }
 
 void GameView::globalHostGame() {
@@ -580,6 +671,33 @@ void GameView::globalJoinGame() {
     }
 }
 
+#include <QThread> // 파일 상단에 추가
+
+void GameView::updateDatabaseResult(bool isWinner) {
+    if (loggedInUserId.isEmpty()) return;
+
+    QSqlQuery query;
+    if (isWinner) {
+        query.prepare("UPDATE users SET wins = wins + 1 WHERE id = :id");
+    } else {
+        query.prepare("UPDATE users SET losses = losses + 1 WHERE id = :id");
+    }
+    query.bindValue(":id", loggedInUserId);
+
+    // 동시 쓰기(Lock) 충돌 방지를 위한 재시도 로직
+    bool success = false;
+    for (int i = 0; i < 10; ++i) {
+        if (query.exec()) {
+            success = true;
+            qDebug() << "전적 기록 성공! 유저:" << loggedInUserId << (isWinner ? "승리" : "패배");
+            break; // 성공하면 루프 탈출
+        }
+        QThread::msleep(50); // 실패 시 0.05초 대기 후 다시 시도
+    }
+
+    if (!success) {
+        qDebug() << "DB 업데이트 최종 실패:" << query.lastError().text();
+    }
 void GameView::showHostGameSettings() {
     scene->clear();
     drawTitle(100, 40);
