@@ -40,6 +40,18 @@ GameView::GameView() {
 void GameView::displayMainMenu() {
     scene->clear();
 
+    // ==========================================================
+    // --- [복구된 코드] 오른쪽 상단 로그인 정보(닉네임) 표시 ---
+    if (!loggedInUserId.isEmpty()) {
+        QGraphicsTextItem *userDisplay = Utils::createTextItem("닉네임 : " + loggedInUserId, 16, QColor("#FFD700")); // 노란색(골드) 텍스트
+        // 화면 오른쪽 구석 좌표 계산 (우측 여백 20, 상단 여백 20)
+        double infoX = this->width() - userDisplay->boundingRect().width() - 20;
+        double infoY = 20;
+        userDisplay->setPos(infoX, infoY);
+        scene->addItem(userDisplay);
+    }
+    // ==========================================================
+
     // create title label
     double titleYPosition = 150;
     drawTitle(titleYPosition, 50);
@@ -64,47 +76,27 @@ void GameView::displayMainMenu() {
 }
 
 void GameView::displayRoomList() {
+    // 1. 화면 초기화 및 변수 세팅
     if (scene) {
-        scene->clear(); // 여기서 죽는다면, 이전 아이템에 연결된 시그널이 문제일 수 있습니다.
+        scene->clear();
     }
+    discoveredRooms.clear();
+    nextRoomY = 220;
 
-    // --- [추가] 오른쪽 상단 로그인 정보 표시 ---
+    // 2. 우측 상단 닉네임 표시
     if (!loggedInUserId.isEmpty()) {
         QGraphicsTextItem *userInfo = Utils::createTextItem("닉네임: " + loggedInUserId, 15, Qt::yellow);
-        // 오른쪽 구석 좌표 계산 (여백 20)
-        double infoX = this->width() - userInfo->boundingRect().width() - 20;
-        double infoY = 20;
-        userInfo->setPos(infoX, infoY);
+        userInfo->setPos(this->width() - userInfo->boundingRect().width() - 20, 20);
         scene->addItem(userInfo);
     }
-    scene->clear(); // 현재 화면 지우기
-    discoveredRooms.clear(); // 검색된 방 목록 초기화
-    nextRoomY = 220;         // 헤더(150) 아래에 첫 번째 방이 나타날 위치
 
-    // 2. 하단 컨트롤 버튼
-    // [새로고침] - 다시 이 함수를 호출하여 화면을 깨끗하게 하고 재검색
-    ActionButton *refreshBtn = new ActionButton("Refresh");
-    refreshBtn->setPos(this->width()/2 + 250, 650);
-    connect(refreshBtn, &ActionButton::buttonPressed, this, &GameView::displayRoomList);
-    scene->addItem(refreshBtn);
-
-    // 로비용 NetworkManager 생성 및 듣기 시작
-    if (!networkManager) networkManager = new NetworkManager(this);
-
-    disconnect(networkManager, &NetworkManager::gameDiscovered, this, &GameView::onGameDiscovered);
-    connect(networkManager, &NetworkManager::gameDiscovered, this, &GameView::onGameDiscovered);
-
-    networkManager->startListeningForGames();
-
-    // 1. 제목 그리기
+    // 3. 로비 제목 (Lobby)
     QGraphicsTextItem *title = Utils::createTextItem("Lobby", 40, Qt::white);
-    double xPosition = this->width()/2 - title->boundingRect().width()/2;
-    title->setPos(xPosition, 50);
+    title->setPos(this->width()/2 - title->boundingRect().width()/2, 50);
     scene->addItem(title);
 
-    // 2. 테이블 헤더 설정 (간격 조절)
-    int startY = 150;
-    int col1 = 200, col3 = 700, col4 = 900; // X 좌표 간격
+    // 4. 테이블 헤더 설정
+    int col1 = 200, col3 = 700, col4 = 900;
     QGraphicsTextItem *roomnameText = Utils::createTextItem("Room name", 20, Qt::white);
     roomnameText->setPos(col1, 150);
     scene->addItem(roomnameText);
@@ -117,98 +109,52 @@ void GameView::displayRoomList() {
     actionText->setPos(col4, 150);
     scene->addItem(actionText);
 
-    /*
-    QGraphicsTextItem *h1 = Utils::createTextItem("Game Name", 20, Qt::white);
-    h1->setPos(col1, startY);
-    scene->addItem(h1);
-
-    QGraphicsTextItem *h2 = Utils::createTextItem("Players", 20, Qt::white);
-    h2->setPos(col3, startY);
-    scene->addItem(h2);
-
-    QGraphicsTextItem *h3 = Utils::createTextItem("Action", 20, Qt::white);
-    h3->setPos(col4, startY);
-    scene->addItem(h3);
-    */
-
-    // 3. 더미 방 목록 데이터 루프 (예시 3개)
-//     struct Room { QString name; QString players; };
-//     QList<Room> rooms = { {"Software Chess", "1/2"}, {"PVP Challenge", "1/2"}, {"Wait for King", "0/2"} };
-
-//     for(int i = 0; i < rooms.size(); ++i) {
-//         int rowY = startY + 60 + (i * 70); // 행 간격
-
-//         // 방 이름
-//         QGraphicsTextItem *rName = Utils::createTextItem(rooms[i].name, 18, Qt::lightGray);
-//         rName->setPos(col1, rowY + 10);
-//         scene->addItem(rName);
-
-//         // 인원 수
-//         QGraphicsTextItem *rPlayers = Utils::createTextItem(rooms[i].players, 18, Qt::lightGray);
-//         rPlayers->setPos(col3, rowY + 10);
-//         scene->addItem(rPlayers);
-
-//         // Join 버튼 (기존 ActionButton 재활용)
-//         ActionButton *joinBtn = new ActionButton("Join");
-//         joinBtn->setPos(col4, rowY);
-//         joinBtn->setScale(0.7); // 리스트용으로 조금 작게 조절
-//         // 수정된 코드
-//         connect(joinBtn, &ActionButton::buttonPressed, this, [this](){
-//             myColor = PlayerType::black;
-
-//             // 1. 인스턴스 생성 (누락되었던 부분)
-//             if (!networkManager) {
-//                 networkManager = new NetworkManager(this);
-//             }
-
-//             // 2. 시그널 연결을 먼저 수행하는 것이 안전합니다.
-//             connect(networkManager, &NetworkManager::dataReceived, this, &GameView::onDataReceived);
-//             connect(networkManager, &NetworkManager::connected, this, &GameView::startGame);
-
-//             // 3. 서버 접속 시도
-//             networkManager->connectToHost("127.0.0.1", 12345);
-//         });
-//         scene->addItem(joinBtn);
-
-//         ActionButton *globalJoinBtn = new ActionButton("Global Join");
-//         globalJoinBtn->setPos(this->width()/2 + 20, 550);
-//         connect(globalJoinBtn, SIGNAL(buttonPressed()), this, SLOT(globalJoinGame()));
-//         scene->addItem(globalJoinBtn);
-
-//         ActionButton *globalHostBtn = new ActionButton("Global Host");
-//         globalHostBtn->setPos(globalJoinBtn->boundingRect().width() + 180, 550);
-//         connect(globalHostBtn, SIGNAL(buttonPressed()), this, SLOT(globalHostGame()));
-//         scene->addItem(globalHostBtn);
-//     }
-
+    // 5. 버튼 객체 생성 (요청하신 순서대로 생성)
+    ActionButton *hostButton = new ActionButton("Host Game");
+    ActionButton *refreshBtn = new ActionButton("Refresh");
     ActionButton *rankingBtn = new ActionButton("Ranking");
+    ActionButton *backButton = new ActionButton("Back to Menu");
 
-    // 위치 설정: "Back to Menu" 버튼의 왼쪽 혹은 적절한 빈 공간
-    // 여기서는 화면 하단 중앙 근처로 배치하겠습니다.
-    rankingBtn->setPos(this->width()/2 - rankingBtn->boundingRect().width() / 2, 480);
-
-    // 버튼 클릭 시 RankingDialog 실행 연결 (람다식 활용)
+    // 6. 버튼 시그널 연결
+    connect(hostButton, SIGNAL(buttonPressed()), this, SLOT(showHostGameSettings()));
+    connect(refreshBtn, &ActionButton::buttonPressed, this, &GameView::displayRoomList);
     connect(rankingBtn, &ActionButton::buttonPressed, this, [this]() {
         RankingDialog *dialog = new RankingDialog(this);
-        // 창이 닫히면 메모리에서 자동으로 삭제되도록 설정
         dialog->setAttribute(Qt::WA_DeleteOnClose);
         dialog->show();
     });
-    scene->addItem(rankingBtn);
-
-
-    // [수정] 단일 Host Game 버튼 생성
-    ActionButton *hostButton = new ActionButton("Host Game");
-    hostButton->setPos(this->width()/2 - hostButton->boundingRect().width() - 20, 650);
-    // 클릭 시 설정 화면으로 이동
-    connect(hostButton, SIGNAL(buttonPressed()), this, SLOT(showHostGameSettings()));
-    scene->addItem(hostButton);
-
-    // --- 기존: Back to Menu 버튼 (위치 살짝 조정) ---
-    ActionButton *backButton = new ActionButton("Back to Menu");
-    backButton->setPos(this->width()/2 + 20, 650);
     connect(backButton, SIGNAL(buttonPressed()), this, SLOT(displayMainMenu()));
-    scene->addItem(backButton);
+
+    // 7. [핵심] 일렬 가로 정렬 및 중앙 배치 로직
+    QList<ActionButton*> buttons;
+    buttons << hostButton << refreshBtn << rankingBtn << backButton;
+
+    double spacing = 25; // 버튼 사이의 간격
+    double totalButtonsWidth = 0;
+
+    // 전체 버튼 너비 합산
+    for(ActionButton* btn : buttons) {
+        totalButtonsWidth += btn->boundingRect().width();
+    }
+    totalButtonsWidth += spacing * (buttons.size() - 1);
+
+    // 시작 X 좌표 (화면 중앙 기준)
+    double startX = (this->width() - totalButtonsWidth) / 2;
+    // Y 좌표 (650에서 살짝 위로 올린 610)
+    double buttonsY = 610;
+
+    // 순서대로 배치 및 씬에 추가
+    for(ActionButton* btn : buttons) {
+        btn->setPos(startX, buttonsY);
+        scene->addItem(btn);
+        startX += btn->boundingRect().width() + spacing;
+    }
+
+    // 8. 네트워크 리스닝 시작
+    if (!networkManager) networkManager = new NetworkManager(this);
+    disconnect(networkManager, &NetworkManager::gameDiscovered, this, &GameView::onGameDiscovered);
+    connect(networkManager, &NetworkManager::gameDiscovered, this, &GameView::onGameDiscovered);
+    networkManager->startListeningForGames();
 }
 
 // 방 만들기 버튼 클릭 시 실행될 함수
